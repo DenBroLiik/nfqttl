@@ -1,6 +1,6 @@
 id=nfqttl
-name=Nfqttl Eclipse Speed + Stability
-version=v3.0.0-eclipse
-versionCode=300
-author=Cyborg-one (original module); custom stone/RisingOS/Eclipse rewrite
-description=High-throughput tether TTL for Xiaomi stone: kernel TTL or GSO multi-NFQUEUE, atomic rules, IPv6 leak control, route/call recovery and diagnostics.
+name=Nfqttl Eclipse Rust
+version=v4.0.0-rust
+versionCode=400
+author=Cyborg-one (original); stone/RisingOS/Eclipse Rust rewrite
+description=Rust supervisor + raw-netlink NFQUEUE TTL engine for Xiaomi stone: native kernel TTL/HL when available, multi-queue fallback, route-event recovery, IPv6 policy and diagnostics.

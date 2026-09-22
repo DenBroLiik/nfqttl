@@ -1,57 +1,61 @@
-# Nfqttl Eclipse 3.0.0 — developer notes
+# Nfqttl Eclipse Rust 4.0 — developer notes
 
-## Target
+## Architecture
 
-Primary target: Xiaomi `stone`, RisingOS, Eclipse kernel, arm64-v8a. Current Eclipse `stone_defconfig` has NFQUEUE and BPF support but lacks xt_HL/IPv4 TTL target, so stock builds use the NFQUEUE fallback.
+One Rust executable has several roles:
+
+```text
+service.sh -> nfqttl daemon
+                  |-- NETLINK_ROUTE event watcher
+                  |-- iptables/ip6tables atomic chain manager
+                  |-- offload ownership/restore
+                  |-- NFQUEUE watchdog
+                  `-- spawns N x `nfqttl worker`
+
+control.sh -> nfqttl status|start|stop|restart
+```
+
+Workers are separate processes intentionally. Every NFQUEUE socket binds its own netlink port id/PID and iptables `--queue-balance` can distribute packets over queues 6464..646N in parallel. A single multi-threaded process would require different port-id handling and would make v3-compatible watchdog ownership less transparent.
 
 ## Data path
 
-1. `service.sh` discovers tether downstream and active uplinks from Android policy routing tables.
-2. Native `TTL --ttl-set` is probed first. If unavailable, `NFQUEUE` is used.
-3. NFQUEUE uses queues starting at 6464. `WORKERS=4` requests 6464..6467 with `--queue-balance`.
-4. Each arm64 worker requests `NFQA_CFG_F_FAIL_OPEN | NFQA_CFG_F_GSO`, queue maxlen 1024, and a 4 MiB receive socket buffer.
-5. The worker changes only IPv4 TTL and recomputes the IPv4 header checksum. TCP/UDP payload and transport headers are untouched.
-6. Rules are installed behind a stable `nfqttl_v30h` hook. Route changes build the inactive leaf then `-R` the hook, avoiding the old double-queue window.
+1. Daemon probes `TTL --ttl-set`.
+2. When present, kernel backend is used and no Rust packet worker is launched.
+3. Otherwise daemon probes `--queue-balance`, starts 1..8 Rust workers and only then attaches forwarding rules.
+4. Worker binds `NETLINK_NETFILTER`, configures queue copy mode, maxlen=1024 and flags FAIL_OPEN+GSO.
+5. Only IPv4 packets at `NF_INET_FORWARD` are rewritten; TCP/UDP and payload are not changed.
+6. Daemon watches `/proc/net/netfilter/nfnetlink_queue` for queue ownership, backlog, drops and sequence progress.
+7. Route/link/address changes wake the daemon through `NETLINK_ROUTE`; a 1s poll timeout doubles as watchdog cadence.
 
-## Why GSO
+## Firewall atomicity
 
-Without `NFQA_CFG_F_GSO`, the kernel normalizes/segments GSO packets before sending them to NFQUEUE. That increases packet rate and userspace/netlink overhead. v3 keeps GSO packets intact where supported.
+The stable hooks are now `nfqttl_v40h` and `nfqttl6_v40h`. Two leaf chains (`v40a`, `v40b`) alternate. New rules are fully populated before hook rule 1 is replaced. Cleanup also removes v3/v2.9 chain names for migration.
 
-## Watchdog policy
+## IPv6 policy
 
-- Worker death, missing queue ownership, or a queue that stops making sequence progress triggers recovery.
-- A changed packet-drop counter is warning telemetry, not an immediate circuit-break condition.
-- Repeated hard failures degrade worker count 4 -> 2 -> 1 before the supervisor gives up.
-- 60 seconds of stable processing resets the failure counter.
+- `auto`: normalize using `HL --hl-set` when supported, otherwise block forwarded tether IPv6.
+- `normalize`: fail startup if HL target is unavailable.
+- `block`: always DROP forwarded tether IPv6. This fixes the v3 behavior where explicit block could become normalize when HL existed.
+- `pass`: untouched.
 
-## IPv6
+## Why kernel code remains C/Linux netfilter
 
-`IPV6_MODE=auto` probes `ip6tables -j HL --hl-set`. If the target is unavailable it blocks forwarded tether IPv6 to avoid a separate hop-limit/address path that bypasses IPv4 TTL rewriting. If `ip6tables` itself is unavailable, effective mode is `pass-no-ip6tables` with an explicit warning; `pass` leaves IPv6 untouched by request.
+The target Eclipse tree is Linux 5.4.303 and has no Rust-for-Linux build infrastructure. Rust is therefore used where it is valuable and deployable today: daemon, state machine, route watcher, CLI and NFQUEUE packet engine. The included kernel patch still enables `CONFIG_IP_NF_TARGET_TTL`/`CONFIG_IP6_NF_TARGET_HL` for the fastest path.
 
-The included kernel patch enables the dependency and targets:
+## Validation
 
-- `CONFIG_NETFILTER_ADVANCED=y`
-- `CONFIG_NETFILTER_XT_TARGET_HL=y`
-- `CONFIG_IP_NF_TARGET_TTL=y`
-- `CONFIG_IP6_NF_TARGET_HL=y`
-
-With these options built into Eclipse, the module can use in-kernel rewriting and should be preferable to NFQUEUE for throughput/latency.
-
-## Build
-
-Worker source: `src/nfqttl-lite.c`.
+Host:
 
 ```sh
-cd src/..
-ZIG=zig ./src/build.sh
+cargo test
+cargo clippy --all-targets -- -D warnings
 ```
 
-For the provided stone package only `libs/arm64-v8a/nfqttl-lite` is shipped. The source build script can still produce other ABIs for development.
+Target build:
 
-## Validation checklist
+```sh
+./src/build.sh
+file libs/arm64-v8a/nfqttl
+```
 
-- `sh -n` all shell scripts.
-- Compile/run `tests/test_worker.c` under ASan/UBSan.
-- Verify arm64 binary reports `maxlen=1024 gso=1`.
-- On phone: test hotspot speed, packet loss, SIM call, VoWiFi call, route changes, 1/2/3+ client devices.
-- Capture `diagnose.sh before`, `during`, and `after` if latency or throughput regresses.
+Phone validation should repeat v3 tests: hotspot speed + ping, 1/2/3+ clients, mobile route changes, SIM call, VoWiFi call, worker kill/recovery, queue backlog/drops and IPv6 policy.

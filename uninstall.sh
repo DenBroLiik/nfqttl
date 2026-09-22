@@ -1,4 +1,3 @@
 #!/system/bin/sh
 MODDIR=${0%/*}
-sh "$MODDIR/control.sh" stop
-# Retain baseline and diagnostics if restoration cannot finish during uninstall.
+"$MODDIR/nfqttl" stop --module-dir "$MODDIR" 2>/dev/null || true

@@ -7,7 +7,7 @@ OUT=/sdcard/Download/nfqttl_$(date +%Y%m%d_%H%M%S)_${LABEL}_$$.txt
 command -v timeout >/dev/null 2>&1 || { echo "Android timeout command missing"; exit 1; }
 run() { echo; echo "--- $* ---"; timeout 10 "$@" 2>&1; }
 {
-    echo "Nfqttl Eclipse Rust 4.0 diagnostic: $LABEL"
+    echo "Nfqttl Eclipse 3.0.0 diagnostic: $LABEL"
     date
     run uname -a
     run getprop ro.product.device
@@ -17,7 +17,7 @@ run() { echo; echo "--- $* ---"; timeout 10 "$@" 2>&1; }
     run getprop gsm.network.type
     run getprop gsm.data.network.type
     run dumpsys telephony.registry
-    run "$MODDIR/nfqttl" status --module-dir "$MODDIR"
+    run sh "$MODDIR/control.sh" status
     echo; echo "Worker logs:"
     for f in /data/adb/nfqttl-state/worker.*.log; do [ -f "$f" ] && { echo "--- $f ---"; tail -n 80 "$f"; }; done
     run ip -o link show

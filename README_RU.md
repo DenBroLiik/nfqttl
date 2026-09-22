@@ -1,64 +1,91 @@
-# Nfqttl Eclipse Speed + Stability 3.0.0
+# Nfqttl Eclipse Rust 4.0.0
 
-Специальная сборка Magisk-модуля для `xiaomi_stone` (POCO X5 5G / Redmi Note 12 5G), RisingOS + Eclipse Kernel.
-Цель: убрать узкое место старого NFQUEUE fallback, уменьшить потери/скачки задержки при раздаче и не оставлять очевидную IPv4 TTL/IPv6 hop-limit утечку при нескольких клиентах.
+Rust-переписывание Nfqttl v3 для Xiaomi `stone`, RisingOS 9 и Eclipse Kernel 5.4.
 
-## Что изменено
+## Что переписано
 
-- NFQUEUE worker на arm64: `NFQA_CFG_F_GSO` включён, queue maxlen увеличен `64 -> 1024`, socket receive buffer `1 MiB -> 4 MiB`.
-- До 4 NFQUEUE workers через `--queue-balance` вместо одного процесса. Если iptables не поддерживает balance, автоматический fallback на одну очередь.
-- Watchdog больше не выключает TTL из-за одного изменения drop-счётчика. Drops логируются; recovery выполняется при смерти worker/queue или реальном stall.
-- Переход между uplink-интерфейсами делается через постоянную hook-цепочку и атомарную замену leaf-rule, без краткого двойного прохождения NFQUEUE.
-- Интерфейсы проверяются каждую секунду, поэтому переключения `rmnet_data*` во время звонка/смены сети отрабатываются быстрее. Автоопределение uplink также учитывает `tun/tap/wg/tailscale/zt` для VPN-маршрутов.
-- IPv6: `IPV6_MODE=auto` пытается использовать `HL --hl-set 64`. На текущем Eclipse target HL отсутствует, поэтому auto блокирует forwarded IPv6 от tether-клиентов, чтобы он не обходил IPv4 TTL-нормализацию. Если `ip6tables` вообще отсутствует в ROM, модуль явно пишет `pass-no-ip6tables` и предупреждение вместо ложного статуса «block». `IPV6_MODE=pass` отключает защиту IPv6.
-- Добавлен патч Eclipse defconfig для нативных IPv4 TTL + IPv6 HL targets. После сборки ядра с этим патчем модуль сможет уйти с userspace NFQUEUE на самый быстрый kernel backend.
+- `service.sh` supervisor -> `nfqttl daemon` на Rust.
+- C `nfqttl-lite` -> встроенный Rust `nfqttl worker` с raw `NETLINK_NETFILTER`, без `libnetfilter_queue`.
+- `control.sh` -> Rust CLI (`status/start/stop/restart`), shell-файл теперь только совместимый launcher.
+- Route/link recovery получает события напрямую через `NETLINK_ROUTE`; раз в секунду остаётся watchdog для NFQUEUE health/stall.
+- Multi-NFQUEUE сохранён: очереди начинаются с `6464`, `WORKERS=4` использует `--queue-balance` при поддержке iptables.
+- GSO + fail-open сохранены: `NFQA_CFG_F_GSO | NFQA_CFG_F_FAIL_OPEN`, queue maxlen `1024`, receive buffer `4 MiB`.
+- IPv4 worker изменяет только TTL и пересчитывает IPv4 header checksum.
+- Kernel backend `TTL --ttl-set` остаётся приоритетным и не переписывается на Rust: Eclipse 5.4 не имеет Rust-for-Linux инфраструктуры.
+- IPv6 поведение исправлено: `block` теперь всегда block; `normalize` всегда требует `HL`; `auto` выбирает normalize или block.
+- Android tether offload отключается с сохранением предыдущего значения и восстанавливается при штатной остановке.
+
+## Сборка arm64
+
+Нужны Rust (`cargo`, `rustup`) и rust-lld. rust-lld уже использовался в v3 для musl worker.
+
+```sh
+./src/build.sh
+```
+
+Результат:
+
+```text
+libs/arm64-v8a/nfqttl
+```
+
+Это статический `aarch64-unknown-linux-musl` бинарник, чтобы не зависеть от Android userspace libc. После сборки упакуй содержимое каталога модуля в ZIP.
 
 ## Установка
 
-1. Установить ZIP через Magisk поверх старого `nfqttl` (`id=nfqttl` сохранён).
-2. Перезагрузить телефон.
-3. Выключить и снова включить точку доступа.
-4. Проверить состояние:
+После сборки бинарника:
+
+```sh
+zip -r9 nfqttl_v4.0.0_rust.zip . -x 'target/*' '.git/*'
+```
+
+Установить ZIP через Magisk/KernelSU, перезагрузить телефон и перед тестом перезапустить hotspot.
+
+Проверка:
+
+```sh
+su -c '/data/adb/modules/nfqttl/nfqttl status'
+```
+
+Совместимая команда тоже работает:
 
 ```sh
 su -c 'sh /data/adb/modules/nfqttl/control.sh status'
 ```
 
-На текущем Eclipse без дополнительного kernel-патча ожидается `Backend: nfqueue` и обычно `NFQUEUE workers: 4`. Скорость выше старых ~7 МБ/с является целью этой версии, но реальный предел зависит от модема, Wi‑Fi, CPU и ROM и должен проверяться на телефоне.
+## Конфигурация
 
-## Проверка скорости и потерь
-
-На подключённом устройстве одновременно проверь download и ping. Во время теста можно снять диагностику:
-
-```sh
-su -c 'sh /data/adb/modules/nfqttl/diagnose.sh during'
-```
-
-Файл появится в `/sdcard/Download/`.
-
-Если `Queue` постоянно имеет большой backlog или растут drops, попробуй `WORKERS=6` либо `WORKERS=8` в `config.conf`. Если CPU/нагрев растут без прироста — верни `4`.
-
-## IPv6 и обнаружение раздачи
-
-TTL/HL — только один из признаков tethering. Модуль нормализует IPv4 TTL и в `auto` не позволяет IPv6 тихо обходить эту схему, однако оператор всё равно может использовать APN/DUN policy, DPI, характер трафика и другие серверные признаки. Полностью гарантировать «не обнаружит раздачу» на стороне оператора нельзя.
-
-Если нужен IPv6 любой ценой:
-
-```sh
-IPV6_MODE=pass
-```
-
-Если соберёшь Eclipse с патчем из `kernel/0001-stone-enable-ipv4-ipv6-hoplimit.patch`, оставляй `IPV6_MODE=auto`: будет нативный HL rewrite вместо блокировки.
-
-## Основные настройки
+Формат `config.conf` сохранён от v3:
 
 ```sh
 TTL=64
 BACKEND=auto
 WORKERS=4
+DOWNSTREAMS=""
+UPSTREAMS=""
 DISABLE_OFFLOAD=1
 IPV6_MODE=auto
 IPV6_HL=64
+MAX_FAILURES=6
+COOLDOWN=3
+MAX_BACKLOG=768
+STALL_LIMIT=3
 ```
 
-`DISABLE_OFFLOAD=1` оставлен специально: Android/Qualcomm tether offload может обходить обычные netfilter hooks. Для корректной TTL-нормализации лучше software forwarding; NFQUEUE v3 компенсирует его стоимость GSO + multi-queue.
+`BACKEND=auto`: сначала пробует kernel TTL target, иначе Rust NFQUEUE. `kernel` требует TTL target, `nfqueue` принудительно использует Rust worker.
+
+## Важное
+
+В этом исходном пакете `libs/arm64-v8a/nfqttl` появляется только после `./src/build.sh`. Не прошивай ZIP без бинарника: installer специально остановится с `Missing Rust arm64 binary`.
+
+## Автоматическая упаковка
+
+`./src/build.sh` теперь после успешной ARM64 release-сборки автоматически создаёт установочный ZIP:
+
+```text
+dist/nfqttl-v4.0.0-rust.zip
+```
+
+ZIP валидируется перед завершением сборки: `module.prop` должен находиться в корне, а `customize.sh`, `service.sh`, CLI/diagnostic scripts, config и `libs/arm64-v8a/nfqttl` обязаны присутствовать. Рядом создаётся файл `.sha256`.
+
+`post-fs-data.sh` этой версии не требуется: daemon запускается через `service.sh` на late_start service stage.
