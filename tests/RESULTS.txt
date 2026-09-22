@@ -1,0 +1,37 @@
+Nfqttl Eclipse 3.0.0 validation — 2026-09-22
+
+PASS: POSIX shell syntax (`sh -n`) for module shell scripts after the v3 rewrite.
+PASS: host GCC build of `src/nfqttl-lite.c` with -O2 -Wall -Wextra -Werror.
+PASS: host worker `--help` reports nfqttl-lite 3.0.0.
+PASS: GCC ASan/UBSan worker tests:
+      2805 TTL/IHL/checksum/payload combinations plus validation/verdict scope
+      and 20000 bounded malformed-input cases.
+PASS: shipped `libs/arm64-v8a/nfqttl-lite` is a stripped, statically linked
+      AArch64 ELF with no PT_INTERP.
+PASS: shipped AArch64 worker was verified to contain the v3 queue settings:
+      SO_RCVBUF request 4 MiB, queue maxlen 1024, and flags
+      FAIL_OPEN | GSO; READY string reports `maxlen=1024 gso=1`.
+PASS: source and shipped module agree on TTL=64 defaults and v3 queue settings.
+PASS: kernel patch includes NETFILTER_ADVANCED plus IPv4 TTL / IPv6 HL targets,
+      matching the dependencies in Eclipse netfilter Kconfig.
+PASS: supervisor static review after rewrite found/fixed:
+      - drop-counter changes no longer trip the circuit breaker;
+      - stable hook replacement avoids a transient double-NFQUEUE path;
+      - IPv6 hook loss is now detected and repaired;
+      - ip6tables absence no longer reports a false blocked state;
+      - VPN uplink names are included in auto-detection;
+      - control.sh worker queue labels are printed correctly.
+
+NOT RE-RUN: the old Python service integration suite after the v3 multi-worker
+rewrite. In this sandbox every Android/netfilter mock subprocess has very high
+startup overhead and the suite does not finish within a practical test window.
+`tests/test_service.py` is retained for future device/fast-host work but should
+not be treated as a v3 pass result.
+
+NOT TESTED: real Android/Magisk installation, real AArch64 execution on the
+phone, actual NFQUEUE/GSO throughput, 1/2/3+ hotspot clients, modem/radio route
+changes during SIM/VoLTE/VoWiFi calls, thermals, or carrier-side tethering
+detection. No phone or kernel image was flashed from this environment.
+
+The v3 changes specifically target the old ~7 MB/s userspace bottleneck, but
+no >10 MB/s claim is made until it is measured on the actual stone device.
