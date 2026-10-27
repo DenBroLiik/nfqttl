@@ -1,0 +1,31 @@
+From cf37445a0aa9abcce4b40174ef0a6efdc8225be7 Mon Sep 17 00:00:00 2001
+From: Eclipse network tuning <eclipse@localhost>
+Date: Fri, 2 Oct 2026 00:00:00 +0000
+Subject: [PATCH] arm64: stone: enable built-in CAKE for optional tether SQM
+
+Eclipse already contains sch_cake, but stone_defconfig does not enable it.
+Build it in so a root module can opt selected egress interfaces into CAKE
+without loading an out-of-tree module. Keep the default qdisc unchanged;
+rate shaping requires measured rates and explicit opt-in from userspace.
+
+Targets DenBroLiik/eclipse_kernel_xiaomi_stone, seventeen, commit
+cf37445a0aa9abcce4b40174ef0a6efdc8225be7 (Linux 5.4).
+No modem, firmware, IPA TTL rewrite or RF changes are made.
+
+---
+ arch/arm64/configs/stone_defconfig | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm64/configs/stone_defconfig b/arch/arm64/configs/stone_defconfig
+--- a/arch/arm64/configs/stone_defconfig
++++ b/arch/arm64/configs/stone_defconfig
+@@ -294,6 +294,7 @@
+ CONFIG_NET_SCH_INGRESS=y
+ CONFIG_NET_SCH_FQ=y
+ CONFIG_NET_SCH_FQ_CODEL=y
++CONFIG_NET_SCH_CAKE=y
+ CONFIG_NET_CLS_FW=y
+ CONFIG_NET_CLS_U32=y
+ CONFIG_NET_CLS_BPF=y
+-- 
+2.43.0

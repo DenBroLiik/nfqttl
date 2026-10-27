@@ -1,3 +1,21 @@
-# Tests
+# Verification
 
-`cargo test` covers packet TTL/checksum behavior and input/config validation. Runtime netfilter tests require Android/root or a namespace fixture that provides NETLINK_NETFILTER and iptables; do not run them against a host firewall accidentally.
+- `cargo test`: config parsing/ranges, IPv4 checksum/options, malformed NFQUEUE
+  attributes, queue IDs, truncated GSO handling, IPv6/CLAT/Wi-Fi classification,
+  nonblocking subprocess capture with large stdout/stderr.
+- `cargo build && python3 tests/integration.py`: isolated Android/netd simulation,
+  payload/hook resets, duplicate hooks, IPv6-only USB upstream switch, idle
+  cleanup, flock ownership, pause/start, atomic config updates, rollback of
+  offload and protection of external setting changes.
+- `python3 tests/installer.py`: update migration and invalid-config rejection.
+- `node tests/webui-dom.cjs` (jsdom): bridge commands and form/input behavior.
+- `node tests/webui.cjs`: mocked KernelSU bridge and mobile viewport, config
+  save, start/stop, logs, doctor, text escaping and horizontal overflow.
+
+Live RF throughput, actual Android IPA/BPF behavior and battery use must be
+verified on the phone; the simulator does not reproduce kernel forwarding.
+
+CAKE lifecycle tests use a fake qdisc backend. They cover recovery, idempotence,
+rate changes, custom roots/children and external changes. They do not verify
+Android kernel netlink operations or radio performance. `qos` is a read-only
+live qdisc inspection command for the installed phone.

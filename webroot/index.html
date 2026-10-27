@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><title>Nfqttl Eclipse</title><link rel="stylesheet" href="style.css"></head>
+<body><main>
+<header><div class="mark">e</div><div><p class="eyebrow">ECLIPSE · STONE</p><h1>Управление раздачей</h1></div><span class="version">4.3</span></header>
+<section class="hero"><div class="hero-top"><span id="badge" class="badge">Подключение…</span><button id="refresh" class="icon" aria-label="Обновить">↻</button></div><h2 id="headline">Nfqttl</h2><p id="detail">Проверяем состояние службы</p><div class="metrics"><div><small>Обработка</small><strong id="backend">—</strong></div><div><small>IPv6</small><strong id="ipv6">—</strong></div><div><small>Workers</small><strong id="workers">—</strong></div></div><button id="toggle" class="primary">Загрузка…</button></section>
+<div id="notice" role="status" aria-live="polite" hidden></div>
+<section class="panel"><div class="section-title"><h2>Настройки</h2><span>Применяются вместе</span></div><form id="settings">
+<div class="fields"><label>TTL IPv4<input id="TTL" type="number" min="1" max="255" value="64" required inputmode="numeric"></label><label>Hop Limit IPv6<input id="IPV6_HL" type="number" min="1" max="255" value="64" required inputmode="numeric"></label></div>
+<label>Способ обработки<select id="BACKEND"><option value="auto">Автоматически · рекомендуется</option><option value="kernel">Только ядро</option><option value="nfqueue">NFQUEUE</option></select></label>
+<label>IPv6<select id="IPV6_MODE"><option value="auto">Автоматически</option><option value="normalize">Нормализовать Hop Limit</option><option value="block">Блокировать раздаваемый IPv6</option><option value="pass">Пропускать без изменений</option></select></label>
+<label>Workers NFQUEUE<select id="WORKERS"><option value="1">1 · меньше нагрузки</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
+<label class="switch-row"><span><b>Отключать ускорение раздачи</b><small>Нужно, чтобы пакеты проходили через TTL/HL</small></span><input id="DISABLE_OFFLOAD" type="checkbox" checked></label>
+<p class="hint">После изменения offload выключи и включи точку доступа. В режиме ядра процессы NFQUEUE не запускаются.</p>
+<details><summary>Пинг под нагрузкой · CAKE</summary>
+<p class="hint">Нужен патч ядра CAKE. 0 — выключено. Задай предел ниже устойчивой скорости канала и выбери интерфейсы из раздела «Сеть».</p>
+<div class="fields"><label>Отдача, кбит/с<input id="SQM_UP_KBIT" type="number" min="0" max="1000000" value="0" inputmode="numeric"></label><label>Загрузка клиентам, кбит/с<input id="SQM_DOWN_KBIT" type="number" min="0" max="1000000" value="0" inputmode="numeric"></label></div>
+<div class="fields"><label>Интерфейс интернета<input id="SQM_UP_IFACE" type="text" maxlength="15" placeholder="rmnet_data2" autocomplete="off" spellcheck="false"></label><label>Интерфейс клиентов<input id="SQM_DOWN_IFACE" type="text" maxlength="15" placeholder="wlan2" autocomplete="off" spellcheck="false"></label></div>
+<p class="hint">Имена выше — примеры. Отдача ограничит весь трафик выбранного интерфейса, включая телефон. Не выбирай v4-rmnet или clat. Уровень сигнала эта настройка не меняет.</p>
+</details>
+<button type="submit" class="secondary">Сохранить настройки</button></form></section>
+<section class="panel"><div class="section-title"><h2>Сеть</h2><span id="phase">—</span></div><div class="route"><small>Клиенты</small><code id="downstream">—</code><div class="line"></div><small>Интернет</small><code id="upstream">—</code></div><p id="sqm" class="hint">CAKE выключен.</p><p id="queue" class="hint">Статистика очереди появится в режиме NFQUEUE.</p></section>
+<section class="panel"><div class="section-title"><h2>Диагностика</h2></div><div class="buttons"><button id="doctor" class="secondary">Проверить возможности</button><button id="logs" class="secondary">Журнал</button></div><pre id="output" tabindex="0">Выбери проверку или открой журнал.</pre></section>
+<footer>KernelSU WebUI · настройки хранятся на устройстве</footer>
+</main><script src="app.js"></script></body></html>

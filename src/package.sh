@@ -24,7 +24,7 @@ if command -v readelf >/dev/null 2>&1; then
 fi
 
 VERSION=$(sed -n 's/^version=//p' module.prop | head -n1)
-[ -n "$VERSION" ] || VERSION="v4.0.0-rust"
+[ -n "$VERSION" ] || VERSION="v4.2.0-eclipse"
 
 OUT=${1:-"dist/nfqttl-${VERSION}.zip"}
 mkdir -p "$(dirname "$OUT")"
@@ -35,19 +35,22 @@ STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT INT TERM
 
 # Runtime/install payload only. Keep module.prop at ZIP root.
-for f in module.prop config.conf customize.sh service.sh control.sh diagnose.sh uninstall.sh README_RU.md DEV.md LICENSE; do
+for f in module.prop config.conf customize.sh service.sh action.sh control.sh diagnose.sh uninstall.sh README_RU.md DEV.md LICENSE; do
     [ -e "$f" ] || { echo "error: missing required payload: $f" >&2; exit 1; }
     cp -a "$f" "$STAGE/"
 done
 
 cp -a META-INF "$STAGE/"
 cp -a kernel "$STAGE/"
+cp -a webroot "$STAGE/"
+cp -a docs "$STAGE/"
 mkdir -p "$STAGE/libs/arm64-v8a"
 cp -a "$BIN" "$STAGE/libs/arm64-v8a/nfqttl"
 
 chmod 0755 \
     "$STAGE/customize.sh" \
     "$STAGE/service.sh" \
+    "$STAGE/action.sh" \
     "$STAGE/control.sh" \
     "$STAGE/diagnose.sh" \
     "$STAGE/uninstall.sh" \
@@ -55,6 +58,7 @@ chmod 0755 \
 
 (
     cd "$STAGE"
+    find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
     zip -qr9 "$OUT" .
 )
 
@@ -64,6 +68,8 @@ for required in \
     module.prop \
     customize.sh \
     service.sh \
+    action.sh \
+    webroot/index.html \
     control.sh \
     diagnose.sh \
     uninstall.sh \

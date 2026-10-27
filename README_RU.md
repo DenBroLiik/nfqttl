@@ -1,91 +1,142 @@
-# Nfqttl Eclipse Rust 4.0.0
+# Nfqttl Eclipse 4.3
 
-Rust-переписывание Nfqttl v3 для Xiaomi `stone`, RisingOS 9 и Eclipse Kernel 5.4.
+Добавлен опциональный CAKE SQM для уменьшения задержки при загруженной раздаче.
+По умолчанию выключен; требуются патч ядра, измеренные пределы скорости и
+явно выбранные интерфейсы. Настройка доступна в KernelSU WebUI.
+См. [инструкцию и ограничения](docs/NETWORK_RU.md).
 
-## Что переписано
+# Nfqttl Eclipse 4.3.0
 
-- `service.sh` supervisor -> `nfqttl daemon` на Rust.
-- C `nfqttl-lite` -> встроенный Rust `nfqttl worker` с raw `NETLINK_NETFILTER`, без `libnetfilter_queue`.
-- `control.sh` -> Rust CLI (`status/start/stop/restart`), shell-файл теперь только совместимый launcher.
-- Route/link recovery получает события напрямую через `NETLINK_ROUTE`; раз в секунду остаётся watchdog для NFQUEUE health/stall.
-- Multi-NFQUEUE сохранён: очереди начинаются с `6464`, `WORKERS=4` использует `--queue-balance` при поддержке iptables.
-- GSO + fail-open сохранены: `NFQA_CFG_F_GSO | NFQA_CFG_F_FAIL_OPEN`, queue maxlen `1024`, receive buffer `4 MiB`.
-- IPv4 worker изменяет только TTL и пересчитывает IPv4 header checksum.
-- Kernel backend `TTL --ttl-set` остаётся приоритетным и не переписывается на Rust: Eclipse 5.4 не имеет Rust-for-Linux инфраструктуры.
-- IPv6 поведение исправлено: `block` теперь всегда block; `normalize` всегда требует `HL`; `auto` выбирает normalize или block.
-- Android tether offload отключается с сохранением предыдущего значения и восстанавливается при штатной остановке.
+Модуль Magisk/KernelSU для нормализации TTL IPv4 и Hop Limit IPv6 у
+**раздаваемого** трафика POCO X5 5G (moonstone/stone), Eclipse и RisingOS 9.
+Rust управляет правилами, восстановлением и резервным NFQUEUE. Основной путь —
+`TTL`/`HL` в ядре: ни один пакет не копируется в Rust, worker-процессы не нужны.
+Модуль не меняет TTL самого телефона и не добавляет NAT, DNS, VPN или маршруты.
 
-## Сборка arm64
+## Установка и обновление
 
-Нужны Rust (`cargo`, `rustup`) и rust-lld. rust-lld уже использовался в v3 для musl worker.
+1. Установи **nfqttl-v4.3.0-eclipse.zip** в Magisk или KernelSU.
+2. Перезагрузи телефон. Если раздача уже включена, выключи и включи её.
+3. В KernelSU открой WebUI модуля. Кнопка Action переключает запуск/паузу.
+4. Проверь `doctor` и `status`, затем счётчики во время загрузки с клиента.
 
-```sh
-./src/build.sh
-```
-
-Результат:
-
-```text
-libs/arm64-v8a/nfqttl
-```
-
-Это статический `aarch64-unknown-linux-musl` бинарник, чтобы не зависеть от Android userspace libc. После сборки упакуй содержимое каталога модуля в ZIP.
-
-## Установка
-
-После сборки бинарника:
+Установщик сохраняет существующий `config.conf` и дописывает только отсутствующие
+параметры. Старое `WORKERS=4` или `IPV6_MODE=normalize` остаётся твоим выбором.
+Неверные, повторные и неизвестные настройки отклоняются. На новом конфиге
+`WORKERS=1`; в режиме ядра это значение вообще не используется.
+`stop` сохраняет паузу между перезагрузками; `start` снимает её.
 
 ```sh
-zip -r9 nfqttl_v4.0.0_rust.zip . -x 'target/*' '.git/*'
-```
-
-Установить ZIP через Magisk/KernelSU, перезагрузить телефон и перед тестом перезапустить hotspot.
-
-Проверка:
-
-```sh
+su -c '/data/adb/modules/nfqttl/nfqttl doctor'
 su -c '/data/adb/modules/nfqttl/nfqttl status'
+su -c '/data/adb/modules/nfqttl/nfqttl stop'
+su -c '/data/adb/modules/nfqttl/nfqttl start'
+su -c '/data/adb/modules/nfqttl/nfqttl restart'
+su -c '/data/adb/modules/nfqttl/nfqttl configure TTL=64 IPV6_HL=64 BACKEND=auto IPV6_MODE=auto WORKERS=1'
 ```
 
-Совместимая команда тоже работает:
+`configure` проверяет весь новый конфиг до остановки службы, сохраняет предыдущий
+как `config.conf.bak`, меняет файл через rename и перезапускает работавшую службу.
+Если служба была на паузе, настройки сохраняются без включения.
+WebUI использует те же операции. Панель не требует сети, npm или внешних шрифтов.
+Magisk без поддержки WebUI использует CLI; встроенную страницу настроек самой
+RisingOS модуль не добавляет.
 
-```sh
-su -c 'sh /data/adb/modules/nfqttl/control.sh status'
-```
+## Что улучшено относительно 4.1
+
+- Проверяется не только наличие FORWARD-перехода, но и его положение, отсутствие
+  дублей, содержимое hook и всех правил для выбранных интерфейсов.
+- Обновление правил через две payload-цепочки; восстановление после очистки
+  Android/netd и переключения мобильной сети, Wi-Fi, USB или IPv6-only upstream.
+- Поиск default-маршрутов IPv4 **и** IPv6 во всех таблицах Android, поддержка
+  имён CLAT `v4-rmnet*`; учитываются включённые интерфейсы и глобальные адреса.
+- В простое — netlink-события и редкая проверка вместо запуска `ip`/`iptables`
+  каждые 500 мс. Обнаружение сети не запускается на каждой проверке очереди.
+- Ограничение времени внешних команд: 8 секунд, xtables-lock: 2 секунды.
+- Повторные ошибки дают задержку с ростом до 30–60 секунд и снижение числа
+  NFQUEUE workers, после чего восстановление продолжается. Есть фазы и причины.
+- `flock` не даёт двум supervisor работать одновременно; управляющие команды
+  тоже сериализованы. PID проверяется по executable и отдельному аргументу.
+- Рабочие процессы получают SIGTERM при смерти своего родителя.
+- NFQUEUE меняет пакет в буфере приёма и повторно использует буфер вердиктов.
+  Не пересылает частично скопированный пакет как полный.
+- GSO выключен по умолчанию в NFQUEUE, чтобы oversized skb сегментировались в
+  ядре. Есть `seen/rewritten/unchanged/truncated/enobufs` в журналах workers.
+- Offload отключается только при необходимости записи. Есть журнал исходных
+  значений и владения; восстановление не перезаписывает отличающиеся внешние
+  изменения. Обрабатываются global hardware flag и BPF flags в двух namespace.
+- KernelSU WebUI: запуск/пауза, TTL/HL, режим, workers, offload, журнал, doctor.
 
 ## Конфигурация
 
-Формат `config.conf` сохранён от v3:
+| Параметр | Новый дефолт | Значение |
+|---|---:|---|
+| TTL | 64 | IPv4 TTL, 1–255 |
+| IPV6_HL | 64 | IPv6 Hop Limit, 1–255 |
+| BACKEND | auto | auto/kernel/nfqueue |
+| IPV6_MODE | auto | auto/normalize/block/pass |
+| WORKERS | 1 | 1–8, только NFQUEUE |
+| DOWNSTREAMS | пусто | Пробелы между явными интерфейсами клиентов |
+| UPSTREAMS | пусто | Пробелы между явными выходными интерфейсами |
+| DISABLE_OFFLOAD | 1 | Отключение hardware/BPF offload |
+| GSO | 0 | При 1 допускается получение GSO skb в NFQUEUE |
+| QUEUE_MAXLEN | 4096 | Длина одной очереди, 256–32768 |
+| RCVBUF_MB | 8 | Размер запрошенного netlink receive buffer, 1–64 МБ |
+| MAX_BACKLOG | 3072 | Порог предупреждения, ограничен QUEUE_MAXLEN |
+| STALL_LIMIT | 3 | Число выборок неподвижной непустой очереди |
+| WATCHDOG_MS | 500 | Интервал наблюдения NFQUEUE, 100–5000 мс |
+| CHECK_MS | 5000 | Проверка правил, 1000–60000 мс |
+| RESCAN_MS | 10000 | Резервное обнаружение сети, 1000–60000 мс |
+| IDLE_MS | 10000 | Ожидание в простое, 1000–60000 мс |
+| MAX_FAILURES | 6 | Ошибки до снижения workers/длинной паузы |
+| COOLDOWN | 1 | База задержки повторных попыток, 0–60 с |
+
+`IPV6_MODE=auto`: HL, если target доступен, иначе DROP только для исходящего
+раздаваемого IPv6. Без доступного ip6tables автоматический режим сообщает
+`pass-no-ip6tables`: блокировку гарантировать нельзя. Для обязательной
+нормализации используй `normalize`: отсутствие HL не будет скрыто.
+
+`DOWNSTREAMS`/`UPSTREAMS` полезны при нестандартном tethering/VPN. Это выбор по
+интерфейсам и маршрутам, а не чтение внутреннего состояния Android Tethering.
+При отсутствии default-маршрута VPN укажи выходной интерфейс явно.
+
+## Проверка на телефоне
 
 ```sh
-TTL=64
-BACKEND=auto
-WORKERS=4
-DOWNSTREAMS=""
-UPSTREAMS=""
-DISABLE_OFFLOAD=1
-IPV6_MODE=auto
-IPV6_HL=64
-MAX_FAILURES=6
-COOLDOWN=3
-MAX_BACKLOG=768
-STALL_LIMIT=3
+su -c '/data/adb/modules/nfqttl/nfqttl check'
+su -c '/data/adb/modules/nfqttl/nfqttl snapshot'
+su -c 'sh /data/adb/modules/nfqttl/diagnose.sh during'
 ```
 
-`BACKEND=auto`: сначала пробует kernel TTL target, иначе Rust NFQUEUE. `kernel` требует TTL target, `nfqueue` принудительно использует Rust worker.
+Диагностика пишет файл в Download. Включи раздачу, запусти передачу данных с
+подключённого устройства и проверь счётчики обеих payload-цепочек:
 
-## Важное
-
-В этом исходном пакете `libs/arm64-v8a/nfqttl` появляется только после `./src/build.sh`. Не прошивай ZIP без бинарника: installer специально остановится с `Missing Rust arm64 binary`.
-
-## Автоматическая упаковка
-
-`./src/build.sh` теперь после успешной ARM64 release-сборки автоматически создаёт установочный ZIP:
-
-```text
-dist/nfqttl-v4.0.0-rust.zip
+```sh
+su -c 'iptables -t mangle -L nfqttl_v40a -nvx; iptables -t mangle -L nfqttl_v40b -nvx'
+su -c 'ip6tables -t mangle -L nfqttl6_v40a -nvx; ip6tables -t mangle -L nfqttl6_v40b -nvx'
 ```
 
-ZIP валидируется перед завершением сборки: `module.prop` должен находиться в корне, а `customize.sh`, `service.sh`, CLI/diagnostic scripts, config и `libs/arm64-v8a/nfqttl` обязаны присутствовать. Рядом создаётся файл `.sha256`.
+Для окончательного подтверждения TTL/HL нужна проверка на upstream (tcpdump или
+принимающий узел). Наличие правил или `phase=active` само по себе не доказывает,
+что Qualcomm IPA/BPF перестал обходить netfilter. Именно поэтому hotspot надо
+перезапускать после изменений offload. Если счётчики не растут, приложи диагностику.
 
-`post-fs-data.sh` этой версии не требуется: daemon запускается через `service.sh` на late_start service stage.
+## Проверенные исходники и пределы
+
+Сверены default-ветки `seventeen` трёх предоставленных репозиториев:
+[ядро](https://github.com/DenBroLiik/eclipse_kernel_xiaomi_stone),
+[device](https://github.com/bittencourtjulival/android_device_xiaomi_stone),
+[vendor](https://github.com/bittencourtjulival/android_vendor_xiaomi_stone).
+Проверены stone_defconfig, xt_HL.c, nfnetlink_queue.c, BoardConfig.mk, device.mk,
+stone-vendor.mk. Точные blob SHA перечислены в docs/COMPATIBILITY.md.
+
+Сборка статического AArch64 ELF, тесты Rust и моделирование Android/netd проверены
+в среде разработки. Реальной проверки на твоём POCO и замеров скорости/расхода
+батареи здесь не было. Модуль исправляет обработку и управление раздачей;
+проблемы coexistence Bluetooth/Wi-Fi и драйвера USB требуют отдельного исправления
+ядра/прошивки. TTL/HL не гарантирует обход всех механизмов определения tethering.
+
+В NFQUEUE `--queue-bypass` и FAIL_OPEN предпочитают доступность сети при сбое:
+во время аварии/переполнения часть пакетов может пройти без нормализации.
+При `GSO=1` слишком большой обрезанный пакет также принимается без замены и
+учитывается в `truncated`; это причина оставлять `GSO=0` или использовать ядро.

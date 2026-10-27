@@ -1,61 +1,60 @@
-# Nfqttl Eclipse Rust 4.0 — developer notes
+# Development — Nfqttl 4.3
 
-## Architecture
-
-One Rust executable has several roles:
-
-```text
-service.sh -> nfqttl daemon
-                  |-- NETLINK_ROUTE event watcher
-                  |-- iptables/ip6tables atomic chain manager
-                  |-- offload ownership/restore
-                  |-- NFQUEUE watchdog
-                  `-- spawns N x `nfqttl worker`
-
-control.sh -> nfqttl status|start|stop|restart
-```
-
-Workers are separate processes intentionally. Every NFQUEUE socket binds its own netlink port id/PID and iptables `--queue-balance` can distribute packets over queues 6464..646N in parallel. A single multi-threaded process would require different port-id handling and would make v3-compatible watchdog ownership less transparent.
-
-## Data path
-
-1. Daemon probes `TTL --ttl-set`.
-2. When present, kernel backend is used and no Rust packet worker is launched.
-3. Otherwise daemon probes `--queue-balance`, starts 1..8 Rust workers and only then attaches forwarding rules.
-4. Worker binds `NETLINK_NETFILTER`, configures queue copy mode, maxlen=1024 and flags FAIL_OPEN+GSO.
-5. Only IPv4 packets at `NF_INET_FORWARD` are rewritten; TCP/UDP and payload are not changed.
-6. Daemon watches `/proc/net/netfilter/nfnetlink_queue` for queue ownership, backlog, drops and sequence progress.
-7. Route/link/address changes wake the daemon through `NETLINK_ROUTE`; a 1s poll timeout doubles as watchdog cadence.
-
-## Firewall atomicity
-
-The stable hooks are now `nfqttl_v40h` and `nfqttl6_v40h`. Two leaf chains (`v40a`, `v40b`) alternate. New rules are fully populated before hook rule 1 is replaced. Cleanup also removes v3/v2.9 chain names for migration.
-
-## IPv6 policy
-
-- `auto`: normalize using `HL --hl-set` when supported, otherwise block forwarded tether IPv6.
-- `normalize`: fail startup if HL target is unavailable.
-- `block`: always DROP forwarded tether IPv6. This fixes the v3 behavior where explicit block could become normalize when HL existed.
-- `pass`: untouched.
-
-## Why kernel code remains C/Linux netfilter
-
-The target Eclipse tree is Linux 5.4.303 and has no Rust-for-Linux build infrastructure. Rust is therefore used where it is valuable and deployable today: daemon, state machine, route watcher, CLI and NFQUEUE packet engine. The included kernel patch still enables `CONFIG_IP_NF_TARGET_TTL`/`CONFIG_IP6_NF_TARGET_HL` for the fastest path.
-
-## Validation
-
-Host:
+Rust 2021; no crates or network dependencies in Cargo.lock.
+64-bit Linux syscall ABI, static musl AArch64 binary for Android arm64-v8a.
+The application does not link against Android's libnetfilter_queue.
 
 ```sh
-cargo test
+cargo fmt --check
 cargo clippy --all-targets -- -D warnings
+cargo test
+cargo build
+python3 tests/integration.py
+python3 tests/installer.py
+sh src/build.sh
 ```
 
-Target build:
+`build.sh` installs the musl target via rustup, uses Rust's bundled rust-lld,
+checks AArch64 architecture and absence of ELF interpreter, then creates the
+installable module. `sh src/source-package.sh` creates the source ZIP.
+Rust release profile: opt-level=3, LTO=fat, codegen-units=1, stripped, panic=abort.
+The source archive includes Cargo.lock, tests, frontend, and build scripts.
 
-```sh
-./src/build.sh
-file libs/arm64-v8a/nfqttl
-```
+Optional UI check: install Node Playwright and Chromium, then run
+`node tests/webui.cjs`. `CHROME_BIN` may point to a local Chromium/Chrome binary.
+A browser-free logic check uses `npm install jsdom` followed by
+`node tests/webui-dom.cjs`. The KSU bridge is mocked for host testing; actual Android WebView/root manager
+permissions need an on-device check.
 
-Phone validation should repeat v3 tests: hotspot speed + ping, 1/2/3+ clients, mobile route changes, SIM call, VoWiFi call, worker kill/recovery, queue backlog/drops and IPv6 policy.
+Runtime chain names retain v40 suffix for cleanup compatibility. Queues start
+at 6464. Each worker binds its own netlink port ID to getpid(). Kernel mode has
+zero workers. Two inactive payload chains allow rule replacement without
+flushing the currently active payload. IPv4/IPv6 table changes are sequential,
+not an atomic cross-family transaction. Initial activation attaches one hook.
+Legacy module jumps are removed before deleting chains; unrelated tables and
+Android NAT/filter rules are never flushed.
+
+`NFQTTL_STATE`, `NFQTTL_IPTABLES`, `NFQTTL_IP6TABLES` override paths for isolated
+host tests. They are process environment overrides, not config.conf settings.
+`tests/mock_android.py` simulates routes, netd chain resets, settings and xtables;
+no host firewall modifications occur. NFQUEUE parser tests operate on bytes;
+live kernel packet throughput is not benchmarked by those tests.
+
+`configure` uses a controller flock, validates a temporary full config,
+optionally stops the running supervisor, writes the backup, renames the new
+config, and restarts. Flock files remain in the state directory: deleting a
+locked inode could let a second process lock a different inode. State writes
+use temporary files and rename. Offload rollback checks current values against
+owned values before restoration. Persistent state is private (0700).
+
+KernelSU WebUI calls the documented native exec(command, optionsJson,
+callbackName) API; no remote assets or runtime npm dependency are used.
+Only numeric and enumerated settings reach the shell from the frontend; raw
+logs are displayed with textContent.
+
+## v4.3 CAKE SQM
+src/qos.rs implements a bounded NETLINK_ROUTE client and optional CAKE lifecycle.
+Rates use kbit/s externally and bytes/s in TCA_CAKE_BASE_RATE64. Root changes use
+CREATE|EXCL, private write-before-apply journals, ifindex + handle + full CAKE
+options ownership comparison. Only kernel-default roots are accepted; custom
+qdisc children are preserved. Config is explicit and opt-in. See NETWORK_RU.md.

@@ -9,11 +9,21 @@ pub const NETLINK_ROUTE: i32 = 0;
 pub const NETLINK_NETFILTER: i32 = 12;
 pub const SOL_SOCKET: i32 = 1;
 pub const SO_RCVBUF: i32 = 8;
+pub const SO_RCVBUFFORCE: i32 = 33;
 pub const SO_SNDTIMEO: i32 = 21;
 pub const POLLIN: i16 = 0x0001;
 pub const SIGINT: i32 = 2;
 pub const SIGTERM: i32 = 15;
 pub const EINTR: i32 = 4;
+pub const F_GETFL: i32 = 3;
+pub const F_SETFL: i32 = 4;
+pub const O_NONBLOCK: i32 = 0o4000;
+pub const MSG_DONTWAIT: i32 = 0x40;
+pub const MSG_TRUNC: i32 = 0x20;
+pub const ENOBUFS: i32 = 105;
+pub const LOCK_EX: i32 = 2;
+pub const LOCK_NB: i32 = 4;
+pub const PR_SET_PDEATHSIG: i32 = 1;
 
 pub const RTMGRP_LINK: u32 = 1;
 pub const RTMGRP_IPV4_IFADDR: u32 = 0x10;
@@ -46,14 +56,30 @@ pub struct TimeVal {
 }
 
 extern "C" {
+    pub fn fcntl(fd: i32, cmd: i32, ...) -> i32;
+    pub fn flock(fd: i32, operation: i32) -> i32;
+    pub fn prctl(option: i32, arg2: usize, arg3: usize, arg4: usize, arg5: usize) -> i32;
+    pub fn getppid() -> i32;
     pub fn socket(domain: i32, ty: i32, protocol: i32) -> i32;
     pub fn bind(fd: i32, addr: *const c_void, len: u32) -> i32;
     pub fn setsockopt(fd: i32, level: i32, optname: i32, val: *const c_void, len: u32) -> i32;
-    pub fn sendto(fd: i32, buf: *const c_void, len: usize, flags: i32,
-                  addr: *const c_void, addrlen: u32) -> isize;
+    pub fn sendto(
+        fd: i32,
+        buf: *const c_void,
+        len: usize,
+        flags: i32,
+        addr: *const c_void,
+        addrlen: u32,
+    ) -> isize;
     pub fn recv(fd: i32, buf: *mut c_void, len: usize, flags: i32) -> isize;
-    pub fn recvfrom(fd: i32, buf: *mut c_void, len: usize, flags: i32,
-                    addr: *mut c_void, addrlen: *mut u32) -> isize;
+    pub fn recvfrom(
+        fd: i32,
+        buf: *mut c_void,
+        len: usize,
+        flags: i32,
+        addr: *mut c_void,
+        addrlen: *mut u32,
+    ) -> isize;
     pub fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
     pub fn close(fd: i32) -> i32;
     pub fn getpid() -> i32;
@@ -61,9 +87,15 @@ extern "C" {
     pub fn signal(sig: i32, handler: usize) -> usize;
 }
 
-pub fn last_error() -> io::Error { io::Error::last_os_error() }
+pub fn last_error() -> io::Error {
+    io::Error::last_os_error()
+}
 
 pub struct Fd(pub i32);
 impl Drop for Fd {
-    fn drop(&mut self) { unsafe { close(self.0); } }
+    fn drop(&mut self) {
+        unsafe {
+            close(self.0);
+        }
+    }
 }

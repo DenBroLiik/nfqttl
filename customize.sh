@@ -1,24 +1,28 @@
 #!/sbin/sh
-ui_print "Nfqttl Eclipse Rust 4.0.0 — stone/RisingOS/Eclipse"
+ui_print "Nfqttl Eclipse 4.3 — stone / RisingOS"
 APP_ABI=$(getprop ro.product.cpu.abi)
-[ "$APP_ABI" = "arm64-v8a" ] || abort "This build is arm64-v8a only (got: $APP_ABI)"
-[ -f "$MODPATH/libs/$APP_ABI/nfqttl" ] || abort "Missing Rust arm64 binary. Build it first with src/build.sh."
-cp -f "$MODPATH/libs/$APP_ABI/nfqttl" "$MODPATH/nfqttl"
+[ "$APP_ABI" = "arm64-v8a" ] || abort "This build requires arm64-v8a (got: $APP_ABI)"
+[ -f "$MODPATH/libs/$APP_ABI/nfqttl" ] || abort "Missing ARM64 binary"
+cp -f "$MODPATH/libs/$APP_ABI/nfqttl" "$MODPATH/nfqttl" || abort "Cannot install binary"
 rm -rf "$MODPATH/libs"
-
-if [ -f /data/adb/modules/nfqttl/config.conf ]; then
-    cp -f /data/adb/modules/nfqttl/config.conf "$MODPATH/config.conf"
-    grep -q '^WORKERS=' "$MODPATH/config.conf" || echo 'WORKERS=4' >> "$MODPATH/config.conf"
-    grep -q '^IPV6_MODE=' "$MODPATH/config.conf" || echo 'IPV6_MODE=auto' >> "$MODPATH/config.conf"
-    grep -q '^IPV6_HL=' "$MODPATH/config.conf" || echo 'IPV6_HL=64' >> "$MODPATH/config.conf"
-    grep -q '^MAX_BACKLOG=' "$MODPATH/config.conf" || echo 'MAX_BACKLOG=768' >> "$MODPATH/config.conf"
-    grep -q '^STALL_LIMIT=' "$MODPATH/config.conf" || echo 'STALL_LIMIT=3' >> "$MODPATH/config.conf"
+# Read defaults from this release instead of maintaining a second settings list.
+cp -f "$MODPATH/config.conf" "$MODPATH/config.defaults.conf" || abort "Cannot save defaults"
+OLD=/data/adb/modules/nfqttl/config.conf
+if [ -f "$OLD" ]; then
+    cp -f "$OLD" "$MODPATH/config.conf" || abort "Cannot preserve configuration"
+    while IFS= read -r line; do
+        case "$line" in ''|'#'*) continue ;; esac
+        key=${line%%=*}
+        grep -q "^[[:space:]]*$key[[:space:]]*=" "$MODPATH/config.conf" || printf '%s\n' "$line" >> "$MODPATH/config.conf"
+    done < "$MODPATH/config.defaults.conf"
 fi
-
 set_perm_recursive "$MODPATH" 0 0 0755 0644
-for file in nfqttl service.sh control.sh diagnose.sh uninstall.sh; do
+for file in nfqttl service.sh action.sh control.sh diagnose.sh uninstall.sh; do
     set_perm "$MODPATH/$file" 0 0 0755
 done
-ui_print "Core logic is now Rust: daemon, CLI and raw-netlink NFQUEUE workers."
-ui_print "Kernel TTL/HL backend is still preferred when Eclipse exposes xt_HL/TTL."
-ui_print "Reboot and check: su -c '/data/adb/modules/nfqttl/nfqttl status'"
+set_perm "$MODPATH/config.conf" 0 0 0600
+"$MODPATH/nfqttl" check --module-dir "$MODPATH" || abort "Invalid config.conf; check duplicate/unknown keys and ranges. Previous installed configuration is unchanged."
+ui_print "Existing settings preserved. Kernel TTL/HL is preferred; NFQUEUE is fallback."
+ui_print "KernelSU: open WebUI, or use Action to pause/start."
+ui_print "Reboot; restart hotspot if it was active."
+ui_print "su -c '/data/adb/modules/nfqttl/nfqttl doctor'"

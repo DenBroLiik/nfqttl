@@ -1,7 +1,8 @@
 [package]
 name = "nfqttl"
-version = "4.0.0"
+version = "4.3.0"
 edition = "2021"
+rust-version = "1.74"
 license = "GPL-3.0-or-later"
 description = "Rust supervisor and NFQUEUE TTL engine for Android tethering"
 
