@@ -47,7 +47,16 @@ if name in ('iptables','ip6tables'):
     for k in ([c] if c else table):
      print(('-P '+k+' ACCEPT') if k=='FORWARD' else '-N '+k)
      for x in table[k]:print('-A '+k+' '+' '.join(x))
-  elif op=='-L':print('mock counters')
+  elif op=='-L':
+   ok=c in table
+   if ok:
+    counters=load('counters.json',{})
+    print(f'Chain {c} (1 references)')
+    print('    pkts      bytes target     prot opt in     out     source               destination')
+    for idx,x in enumerate(table[c]):
+     i=x[x.index('-i')+1] if '-i' in x else '*';o=x[x.index('-o')+1] if '-o' in x else '*';t=x[x.index('-j')+1]
+     n=counters.get(f'{name}/{c}/{idx}',0)
+     print(f'{n:>8} {n*100:>10} {t:<10} all  --  {i:<6} {o:<7} 0.0.0.0/0            0.0.0.0/0')
   else:ok=False
   save('fw.json',tables)
   if not ok:print('mock iptables failure',file=sys.stderr)

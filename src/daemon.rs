@@ -364,8 +364,12 @@ fn run_inner(module_dir: &Path) -> io::Result<()> {
     }
     let c = Config::load(&module_dir.join("config.conf"));
     util::log(&format!(
-        "v4.3.0-eclipse starting; requested={:?} ttl={} workers={} ipv6={:?}",
-        c.backend, c.ttl, c.workers, c.ipv6_mode
+        "v{} starting; requested={:?} ttl={} workers={} ipv6={:?}",
+        util::VERSION,
+        c.backend,
+        c.ttl,
+        c.workers,
+        c.ipv6_mode
     ));
     let backend = match c.backend {
         Backend::Nfqueue => EffectiveBackend::Nfqueue,

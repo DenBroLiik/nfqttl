@@ -1,6 +1,6 @@
 id=nfqttl
 name=Nfqttl Eclipse FastPath
-version=v4.3.0-eclipse
-versionCode=430
+version=v4.4.0-eclipse
+versionCode=440
 author=Cyborg-one (original); stone/RisingOS/Eclipse Rust rewrite
-description=Kernel-first TTL/HL fast path for Xiaomi stone/Eclipse with hardened Rust NFQUEUE fallback, route recovery, offload watchdog, diagnostics and optional CAKE SQM (requires kernel patch).
+description=Kernel-first TTL/HL fast path for Xiaomi stone/Eclipse with hardened Rust NFQUEUE fallback, route recovery, offload watchdog, diagnostics and optional CAKE SQM (requires kernel patch), and a built-in data-path verifier (nfqttl verify).

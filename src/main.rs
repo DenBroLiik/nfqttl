@@ -10,6 +10,7 @@ mod packet;
 mod qos;
 mod sys;
 mod util;
+mod verify;
 use std::io;
 use std::path::PathBuf;
 
@@ -37,7 +38,7 @@ fn parse_num<T: std::str::FromStr>(args: &[String], name: &str, default: T) -> i
         })
 }
 fn help() {
-    println!("nfqttl 4.3.0-eclipse\nUsage:\n  nfqttl daemon [--module-dir DIR]\n  nfqttl worker --queue N --ttl N [--queue-maxlen N] [--rcvbuf-mb N]\n  nfqttl status|start|stop|restart|toggle|doctor|check|snapshot|logs|qos\n  nfqttl configure KEY=VALUE [KEY=VALUE ...] [--module-dir DIR]\n");
+    println!("nfqttl {}\nUsage:\n  nfqttl daemon [--module-dir DIR]\n  nfqttl worker --queue N --ttl N [--queue-maxlen N] [--rcvbuf-mb N]\n  nfqttl status|start|stop|restart|toggle|doctor|check|snapshot|logs|qos\n  nfqttl verify [--seconds N] [--iface NAME] [--wire-only]\n  nfqttl configure KEY=VALUE [KEY=VALUE ...] [--module-dir DIR]\n", util::VERSION);
 }
 fn main() {
     if let Err(e) = real_main() {
@@ -98,6 +99,13 @@ fn real_main() -> io::Result<()> {
         }
         "toggle" => ctl::toggle(&module_dir(&a)?),
         "doctor" => ctl::doctor(&module_dir(&a)?),
+        "verify" => {
+            let code = verify::run(&module_dir(&a)?, &a[2..])?;
+            if code != 0 {
+                std::process::exit(code);
+            }
+            Ok(())
+        }
         "status" => ctl::status(&module_dir(&a)?),
         "start" => ctl::start(&module_dir(&a)?),
         "stop" => ctl::stop(),

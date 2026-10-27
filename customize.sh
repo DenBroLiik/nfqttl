@@ -1,5 +1,5 @@
 #!/sbin/sh
-ui_print "Nfqttl Eclipse 4.3 — stone / RisingOS"
+ui_print "Nfqttl Eclipse 4.4 — stone / RisingOS"
 APP_ABI=$(getprop ro.product.cpu.abi)
 [ "$APP_ABI" = "arm64-v8a" ] || abort "This build requires arm64-v8a (got: $APP_ABI)"
 [ -f "$MODPATH/libs/$APP_ABI/nfqttl" ] || abort "Missing ARM64 binary"
@@ -26,3 +26,4 @@ ui_print "Existing settings preserved. Kernel TTL/HL is preferred; NFQUEUE is fa
 ui_print "KernelSU: open WebUI, or use Action to pause/start."
 ui_print "Reboot; restart hotspot if it was active."
 ui_print "su -c '/data/adb/modules/nfqttl/nfqttl doctor'"
+ui_print "Then generate client traffic: su -c '/data/adb/modules/nfqttl/nfqttl verify'"

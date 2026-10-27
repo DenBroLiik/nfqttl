@@ -24,7 +24,7 @@ if command -v readelf >/dev/null 2>&1; then
 fi
 
 VERSION=$(sed -n 's/^version=//p' module.prop | head -n1)
-[ -n "$VERSION" ] || VERSION="v4.2.0-eclipse"
+[ -n "$VERSION" ] || VERSION="v4.4.0-eclipse"
 
 OUT=${1:-"dist/nfqttl-${VERSION}.zip"}
 mkdir -p "$(dirname "$OUT")"

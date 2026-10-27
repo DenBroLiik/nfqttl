@@ -4,6 +4,11 @@ use std::io;
 pub const AF_INET: u8 = 2;
 pub const AF_NETLINK: i32 = 16;
 pub const SOCK_RAW: i32 = 3;
+pub const AF_PACKET: i32 = 17;
+pub const SOCK_DGRAM: i32 = 2;
+pub const SOCK_NONBLOCK: i32 = 0o4000;
+pub const ETH_P_ALL: u16 = 3;
+pub const PACKET_OUTGOING: u8 = 4;
 pub const SOCK_CLOEXEC: i32 = 0o2000000;
 pub const NETLINK_ROUTE: i32 = 0;
 pub const NETLINK_NETFILTER: i32 = 12;
@@ -38,6 +43,19 @@ pub struct SockAddrNl {
     pub nl_pad: u16,
     pub nl_pid: u32,
     pub nl_groups: u32,
+}
+
+/// `struct sockaddr_ll` (20 bytes) as returned by AF_PACKET receive calls.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct SockAddrLl {
+    pub family: u16,
+    pub protocol: u16,
+    pub ifindex: i32,
+    pub hatype: u16,
+    pub pkttype: u8,
+    pub halen: u8,
+    pub addr: [u8; 8],
 }
 
 #[repr(C)]

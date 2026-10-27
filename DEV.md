@@ -1,4 +1,4 @@
-# Development — Nfqttl 4.3
+# Development — Nfqttl 4.4
 
 Rust 2021; no crates or network dependencies in Cargo.lock.
 64-bit Linux syscall ABI, static musl AArch64 binary for Android arm64-v8a.
@@ -10,6 +10,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 cargo build
 python3 tests/integration.py
+python3 tests/verify_wire.py   # live AF_PACKET check on lo, needs root
 python3 tests/installer.py
 sh src/build.sh
 ```
@@ -58,3 +59,15 @@ Rates use kbit/s externally and bytes/s in TCA_CAKE_BASE_RATE64. Root changes us
 CREATE|EXCL, private write-before-apply journals, ifindex + handle + full CAKE
 options ownership comparison. Only kernel-default roots are accepted; custom
 qdisc children are preserved. Config is explicit and opt-in. See NETWORK_RU.md.
+
+## v4.4 verify
+`src/verify.rs` combines two observations over a window: packet deltas of the
+active payload chain (proves the FORWARD hook sees tethered packets) and an
+AF_PACKET `SOCK_DGRAM` tap on each upstream interface (egress TTL, version
+nibble based so raw-IP rmnet/tun devices work). All decisions live in the pure
+`judge()`; exit codes: 0 pass, 2 inconclusive, 3 fail, 1 error. A TTL is
+"foreign" when it is neither the configured value nor the phone default
+(`ip_default_ttl`). A leak needs >=10 foreign packets and >5% of the sample.
+IPv6 wire values are informational only (CLAT can alter them).
+`tests/mock_android.py` now prints iptables counters in the real `-nvx` format
+from `counters.json`.

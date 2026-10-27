@@ -35,4 +35,5 @@ $('settings').onsubmit=event=>{event.preventDefault();operation(async()=>{let ar
  args.push('DISABLE_OFFLOAD='+($('DISABLE_OFFLOAD').checked?'1':'0'));await execute('configure '+args.join(' '));dirty=false;notice('Сохранено. Если служба работала, она перезапущена. После изменения offload перезапусти точку доступа.');await refresh();});};
 $('logs').onclick=()=>operation(async()=>{$('output').textContent=await execute('logs')||'Журнал пуст.';});
 $('doctor').onclick=()=>operation(async()=>{notice('Проверяем возможности ядра и сети…');$('output').textContent=await execute('doctor');notice('Проверка завершена.');});
+$('verify').onclick=()=>operation(async()=>{notice('Идёт проверка 8 секунд. Запусти загрузку на клиенте раздачи…');let text;try{text=await execute('verify --seconds 8');}catch(e){text=e.message;}$('output').textContent=text;notice(/VERIFY_RESULT=PASS/.test(text)?'Поток проходит через правила.':/VERIFY_RESULT=FAIL/.test(text)?'Найдена утечка TTL. Подробности ниже.':'Вывод неоднозначен: нужен трафик от клиента.',/VERIFY_RESULT=FAIL/.test(text));});
 operation(refresh);

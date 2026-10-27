@@ -1,0 +1,23 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: aarch64-unknown-linux-musl
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo build
+      - run: python3 tests/integration.py
+      - run: python3 tests/installer.py
+      - run: sudo python3 tests/verify_wire.py target/debug/nfqttl
+      - run: sh src/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nfqttl-module
+          path: dist/*.zip

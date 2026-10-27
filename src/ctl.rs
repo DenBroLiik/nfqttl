@@ -248,7 +248,7 @@ pub fn doctor(module: &Path) -> io::Result<()> {
     if let Err(e) = crate::qos::status() {
         println!("Qdisc inspection unavailable: {e}");
     }
-    println!("Offload must be disabled before hotspot restart. Verify dumpsys tethering; enabled config values alone do not prove packets take the slow path.");
+    println!("Offload must be disabled before hotspot restart. Verify dumpsys tethering; enabled config values alone do not prove packets take the slow path.\nRun `nfqttl verify` while a hotspot client downloads to confirm the data path.");
     Ok(())
 }
 
@@ -272,7 +272,7 @@ pub fn control_lock() -> io::Result<fs::File> {
 pub fn snapshot(module: &Path) -> io::Result<()> {
     Config::validate(&module.join("config.conf"))?;
     let c = Config::load(&module.join("config.conf"));
-    println!("VERSION=4.3.0-eclipse\nTTL={}\nIPV6_HL={}\nBACKEND={}\nIPV6_MODE={}\nWORKERS={}\nDISABLE_OFFLOAD={}\nGSO={}",c.ttl,c.ipv6_hl,format!("{:?}",c.backend).to_lowercase(),format!("{:?}",c.ipv6_mode).to_lowercase(),c.workers,c.disable_offload as u8,c.gso as u8);
+    println!("VERSION={}\nTTL={}\nIPV6_HL={}\nBACKEND={}\nIPV6_MODE={}\nWORKERS={}\nDISABLE_OFFLOAD={}\nGSO={}",util::VERSION,c.ttl,c.ipv6_hl,format!("{:?}",c.backend).to_lowercase(),format!("{:?}",c.ipv6_mode).to_lowercase(),c.workers,c.disable_offload as u8,c.gso as u8);
     println!(
         "SQM_UP_KBIT={}\nSQM_DOWN_KBIT={}\nSQM_UP_IFACE={}\nSQM_DOWN_IFACE={}",
         c.sqm_up_kbit, c.sqm_down_kbit, c.sqm_up_iface, c.sqm_down_iface

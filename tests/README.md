@@ -7,6 +7,8 @@
   payload/hook resets, duplicate hooks, IPv6-only USB upstream switch, idle
   cleanup, flock ownership, pause/start, atomic config updates, rollback of
   offload and protection of external setting changes.
+- `python3 tests/verify_wire.py`: live AF_PACKET tap on `lo` (root): TTL 64 passes,
+  TTL 63 leak fails with exit 3, noise tolerance, idle link, missing interface.
 - `python3 tests/installer.py`: update migration and invalid-config rejection.
 - `node tests/webui-dom.cjs` (jsdom): bridge commands and form/input behavior.
 - `node tests/webui.cjs`: mocked KernelSU bridge and mobile viewport, config

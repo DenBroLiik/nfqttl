@@ -10,6 +10,8 @@ use std::time::{Duration, Instant};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const STATE: &str = "/data/adb/nfqttl-state";
+/// Single source of truth: Cargo.toml `version` plus the release flavour.
+pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "-eclipse");
 
 pub fn state_dir() -> PathBuf {
     std::env::var_os("NFQTTL_STATE")

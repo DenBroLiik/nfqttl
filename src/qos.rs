@@ -323,7 +323,11 @@ fn journal_path(iface: &str) -> std::path::PathBuf {
     util::state_dir().join(format!("sqm.{iface}.owned"))
 }
 fn hex(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02x}")).collect()
+    use std::fmt::Write;
+    b.iter().fold(String::new(), |mut s, x| {
+        let _ = write!(s, "{x:02x}");
+        s
+    })
 }
 fn unhex(s: &str) -> io::Result<Vec<u8>> {
     if s.len() > 2048 || s.len() % 2 != 0 || !s.is_ascii() {

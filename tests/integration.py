@@ -54,10 +54,21 @@ with tempfile.TemporaryDirectory(prefix='nfqttl-test-') as temp:
   wait(good,'recovers empty hook chains')
   edit_fw(lambda j:j['iptables']['FORWARD'].append(['-j','nfqttl_v40h']))
   wait(good,'removes duplicate forwarding hooks')
+  wait(lambda:active() and good(),'rules settled before verify')
+  # verify: counters prove the FORWARD hook sees tethered packets (wire taps absent in the mock).
+  r=cli('verify','--seconds','2');assert r.returncode==2 and 'VERIFY_RESULT=INCONCLUSIVE' in r.stdout,(r.returncode,r.stdout);print('PASS verify without forwarded traffic is INCONCLUSIVE')
+  wait(lambda:active() and good(),'rules settled after first verify')
+  chain=fw()['iptables']['nfqttl_v40h'][0][-1]
+  def bump():
+   time.sleep(0.8);(d/'counters.json').write_text(json.dumps({f'iptables/{chain}/0':1234}))
+  import threading;t=threading.Thread(target=bump);t.start()
+  r=cli('verify','--seconds','3');t.join();(d/'counters.json').unlink()
+  assert r.returncode==0 and 'VERIFY_RESULT=PASS' in r.stdout and 'Rule hits IPv4: 1234' in r.stdout,(r.returncode,r.stdout);print('PASS verify PASS when rule counters rise during the window')
   (d/'network.json').write_text(json.dumps({'up':'rmnet_data3','down':'rndis0','v6_only':True,'enabled':True}))
   wait(lambda:active() and 'rndis0' in (state/'interfaces').read_text() and 'rmnet_data3' in (state/'interfaces').read_text() and good(),'IPv6-only upstream and USB route switch')
   (d/'network.json').write_text(json.dumps({'up':'rmnet_data3','down':'rndis0','v6_only':True,'enabled':False}))
   wait(lambda:(state/'phase').read_text()=='idle' and not fw()['iptables']['FORWARD'],'removes rules when tether interfaces disappear')
+  r=cli('verify');assert r.returncode==2 and 'not active' in r.stdout,(r.returncode,r.stdout);print('PASS verify refuses to guess while the hotspot is idle')
   assert cli('stop').returncode==0
   daemon.wait(timeout=4)
   values=json.loads((d/'settings.json').read_text());assert values=={'global/tether_offload_disabled':'0','connectivity/tether_enable_bpf_offload':'true','tethering/tether_enable_bpf_offload':'null'};print('PASS restores all original offload settings')
